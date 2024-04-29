@@ -26,8 +26,7 @@ This is a PyQt6-based desktop application for repairing corrupted image files. T
 - rawpy
 - imageio
 
-## Screenshots:
-[Add screenshots here if available]
+```pip install pyqt6 rawpy imageio```
 
 ## Contributions:
 Contributions are welcome! If you encounter any issues or have suggestions for improvements, feel free to open an issue or submit a pull request.
