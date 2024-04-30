@@ -1,0 +1,44 @@
+name: Build Windows Executable and Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'  # This will automatically select the latest Python version available
+
+    - name: Install dependencies
+      run: |
+        pip install pyinstaller PyQt6 rawpy imageio
+
+    - name: Build executable
+      run: |
+        pyinstaller raw_repair_tool.py  # Assuming the main Python script is named "raw_repair_tool.py"
+
+    - name: Create release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v1.0.0  # Specify the tag name for the release
+        release_name: Release v1.0.0  # Specify the release name
+        draft: false
+        prerelease: false
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: exe
+        path: dist/  # Adjust the path if necessary
