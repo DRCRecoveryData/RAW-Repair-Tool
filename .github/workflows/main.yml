@@ -24,7 +24,7 @@ jobs:
 
     - name: Build executable
       run: |
-        pyinstaller raw_repair_tool.py  # Assuming the main Python script is named "raw_repair_tool.py"
+        pyinstaller rawrepair-gui.py  # Assuming the main Python script is named "raw_repair_tool.py"
 
     - name: Create release
       id: create_release
