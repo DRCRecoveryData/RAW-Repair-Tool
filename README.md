@@ -1,7 +1,10 @@
 # RAW-Repair-Tool
 
-![2024-04-30_074243](https://github.com/DRCRecoveryData/RAW-Repair-Tool/assets/85211068/a471ba57-58f2-4103-bf0a-e4dd94b2e1bf)
+# CR2
+![CR2](https://github.com/DRCRecoveryData/RAW-Repair-Tool/blob/main/Images/Screenshot%20from%202024-04-30%2008-02-39.png)
 
+# ARW/NEF
+![ARW/NEF](https://github.com/DRCRecoveryData/RAW-Repair-Tool/blob/main/Images/Screenshot%20from%202024-04-30%2008-03-16.png)
 
 This is a PyQt6-based desktop application for repairing corrupted image files. The tool supports repairing two types of image files: CR2 (Canon RAW) and ARW/NEF (Sony/ Nikon RAW). It can automatically detect the file extension of the reference file to determine the type of files to repair.
 
