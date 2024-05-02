@@ -77,7 +77,7 @@ class FileRepairWorker(QThread):
         with open(output_file, 'wb') as f:
             f.write(reference_header)
             f.write(actual_body)
-
+           #f.truncate(f.tell() - 334)  # Remove the last 334 bytes
     def repair_arw_nef_file(self, encrypted_file, reference_file, output_file):
         ref_start, ref_end = self.find_raw_data_bounds(reference_file)
         corrupt_start, corrupt_end = self.find_raw_data_bounds(encrypted_file)
