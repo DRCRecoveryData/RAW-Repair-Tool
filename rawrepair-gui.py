@@ -1,7 +1,11 @@
 import sys
 import os
 import glob
-from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QProgressBar, QTextEdit, QMessageBox, QCheckBox
+import time
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit,
+    QFileDialog, QProgressBar, QTextEdit, QMessageBox, QCheckBox
+)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import rawpy
 import imageio
@@ -21,44 +25,45 @@ class FileRepairWorker(QThread):
         self.file_extension = None
 
     def run(self):
-        # Detect file extension of the reference file
         self.detect_file_extension()
-
         repaired_folder_path = os.path.join(self.encrypted_folder_path, "Repaired")
         os.makedirs(repaired_folder_path, exist_ok=True)
 
-        if self.convert_to_tiff:
-            converted_folder_path = os.path.join(self.encrypted_folder_path, "Converted")
-            os.makedirs(converted_folder_path, exist_ok=True)
+        if self.convert_to_tiff and self.convert_folder:
+            os.makedirs(self.convert_folder, exist_ok=True)
 
-        encrypted_files = glob.glob(os.path.join(self.encrypted_folder_path, f'*.{self.file_extension}.*'))
-
+        all_files = glob.glob(os.path.join(self.encrypted_folder_path, '*.*'))
+        encrypted_files = [f for f in all_files if f".{self.file_extension.lower()}." in f.lower()]
         total_files = len(encrypted_files)
+
+        if total_files == 0:
+            self.repair_finished.emit("No encrypted files found to repair.")
+            return
 
         for i, encrypted_file in enumerate(encrypted_files):
             file_name, _ = os.path.splitext(os.path.basename(encrypted_file))
             progress_value = (i + 1) * 100 // total_files
             self.progress_updated.emit(progress_value)
             self.log_updated.emit(f"Processing {file_name}...")
-            repaired_file_path = os.path.join(repaired_folder_path, file_name)  # Remove extension
+
+            repaired_file_path = os.path.join(repaired_folder_path, f"{file_name}.{self.file_extension.lower()}")
 
             if self.file_extension.upper() == "CR2":
                 self.repair_cr2_file(encrypted_file, self.reference_file_path, repaired_file_path)
             else:
                 self.repair_arw_nef_file(encrypted_file, self.reference_file_path, repaired_file_path)
 
-            if self.convert_to_tiff:
-                tiff_file_path = os.path.join(converted_folder_path, f"{file_name}.TIFF")  # Correct TIFF extension
+            if self.convert_to_tiff and self.convert_folder:
+                tiff_file_path = os.path.join(self.convert_folder, f"{file_name}.TIFF")
                 self.save_as_tiff(repaired_file_path, tiff_file_path)
                 self.tiff_converted.emit(f"{file_name} converted to TIFF.")
 
-        if self.convert_to_tiff:
-            self.repair_finished.emit(f"Repaired files saved to the 'Repaired' folder.\nTIFF files converted and saved to the 'Converted' folder.")
-        else:
-            self.repair_finished.emit("Repaired files saved to the 'Repaired' folder.")
+        msg = f"Repaired files saved to '{repaired_folder_path}'."
+        if self.convert_to_tiff and self.convert_folder:
+            msg += f"\nTIFF files converted and saved to '{self.convert_folder}'."
+        self.repair_finished.emit(msg)
 
     def detect_file_extension(self):
-        # Extract file extension from reference file path
         _, ext = os.path.splitext(self.reference_file_path)
         self.file_extension = ext.lstrip(".").upper()
 
@@ -66,18 +71,19 @@ class FileRepairWorker(QThread):
         with open(reference_file, 'rb') as f:
             buf = bytearray(f.read())
             pos = buf.rfind(b'\xFF\xD8\xFF\xC4')
-            reference_header = buf[:pos]
-            reference_header[0x62:0x65] = b'\0\0\0'
+            reference_header = buf[:pos] if pos != -1 else buf
+            if len(reference_header) > 0x65:
+                reference_header[0x62:0x65] = b'\0\0\0'
 
         with open(encrypted_file, 'rb') as f:
             buf = bytearray(f.read())
             pos = buf.rfind(b'\xFF\xD8\xFF\xC4')
-            actual_body = buf[pos:]
+            actual_body = buf[pos:] if pos != -1 else buf
 
         with open(output_file, 'wb') as f:
             f.write(reference_header)
             f.write(actual_body)
-           #f.truncate(f.tell() - 334)  # Remove the last 334 bytes
+
     def repair_arw_nef_file(self, encrypted_file, reference_file, output_file):
         ref_start, ref_end = self.find_raw_data_bounds(reference_file)
         corrupt_start, corrupt_end = self.find_raw_data_bounds(encrypted_file)
@@ -87,24 +93,19 @@ class FileRepairWorker(QThread):
         with open(file_path, 'rb') as f:
             data = f.read()
             last_offset = data.rfind(b'\xFF\xD9\x00\x00')
-            file_size = len(data)
-        return last_offset, file_size
+            return last_offset, len(data)
 
     def merge_and_save_repaired_file(self, reference_file_path, corrupt_file_path, output_file_path, ref_end, corrupt_start, corrupt_end):
         with open(reference_file_path, 'rb') as ref_file, open(corrupt_file_path, 'rb') as corrupt_file, open(output_file_path, 'wb') as output_file:
             output_file.write(ref_file.read(ref_end))
             if corrupt_start < ref_end:
-                zero_data_count = ref_end - corrupt_start
-                zero_data = bytearray(zero_data_count)
-                output_file.write(zero_data)
+                output_file.write(bytearray(ref_end - corrupt_start))
             corrupt_file.seek(corrupt_start)
             output_file.write(corrupt_file.read(corrupt_end - corrupt_start))
 
     def save_as_tiff(self, input_file, output_file):
         with rawpy.imread(input_file) as raw:
             rgb = raw.postprocess()
-        base_filename = os.path.splitext(os.path.basename(input_file))[0]  # Remove extension
-        output_file = os.path.join(os.path.dirname(output_file), f"{base_filename}.TIFF")
         imageio.imsave(output_file, rgb)
 
 class FileRepairApp(QWidget):
@@ -187,6 +188,7 @@ class FileRepairApp(QWidget):
             self.convert_folder = QFileDialog.getExistingDirectory(self, "Select Converted Folder")
             if not self.convert_folder:
                 self.convert_checkbox.setChecked(False)
+                self.show_message("Warning", "No converted folder selected. TIFF conversion disabled.")
 
     def repair_files(self):
         reference_file_path = self.reference_path_edit.text()
